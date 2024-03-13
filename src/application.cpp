@@ -39,6 +39,7 @@
 #include <ai/navigation_component.h>
 #include <px/features/px_particles.h>
 #include "px/features/cloth/px_clothing_factory.h"
+#include <ejson_serializer.h>
 
 static raytracing_object_type defineBlasFromMesh(const ref<multi_mesh>& mesh)
 {
@@ -104,12 +105,13 @@ void updatePhysXPhysicsAndScripting(escene& currentScene, enative_scripting_link
 	highPriorityJobQueue.createJob<updatePhysicsAndScriptingData>([](updatePhysicsAndScriptingData& data, job_handle)
 	{
 		{
-			px_physics_engine::get()->update(data.deltaTime);
+			const auto& physicsRef = physics::physics_holder::physicsRef;
+			physicsRef->update(data.deltaTime);
 
-			while (px_physics_engine::collisionQueue.size())
+			while (physicsRef->collisionQueue.size())
 			{
-				const auto& c = px_physics_engine::collisionQueue.back();
-				px_physics_engine::collisionQueue.pop();
+				const auto& c = physicsRef->collisionQueue.back();
+				physicsRef->collisionQueue.pop();
 				data.core.handle_coll(c.id1, c.id2);
 			}
 		}
@@ -217,17 +219,17 @@ void application::initialize(main_renderer* renderer, editor_panels* editorPanel
 		linker.init();
 	}
 
-	px_physics_engine::initialize(this);
+	physics::physics_holder::physicsRef = make_ref<physics::px_physics_engine>(this);
 
 #ifndef ERA_RUNTIME
-	/*if (auto mesh = loadMeshFromFileAsync("assets/Sponza/Sponza.obj"))
+	if (auto mesh = loadMeshFromFileAsync("assets/Sponza/sponza.obj"))
 	{
 		const auto& sponza = scene.createEntity("Sponza")
 			.addComponent<transform_component>(vec3(0.f, 1.f, 0.f), quat::identity, 0.01f)
 			.addComponent<mesh_component>(mesh);
 
 		addRaytracingComponentAsync(sponza, mesh);
-	}*/
+	}
 #endif
 
 #if 0
@@ -280,14 +282,14 @@ void application::initialize(main_renderer* renderer, editor_panels* editorPanel
 			//.addComponent<px_convex_mesh_collider_component>(&(ass.meshes[0]))
 			//.addComponent<px_triangle_mesh_collider_component>(&(ass.meshes[0]))
 			//.addComponent<px_bounding_box_collider_component>(&(ass.meshes[0]))
-			.addComponent<px_sphere_collider_component>(1.0f)
-			.addComponent<px_rigidbody_component>(px_rigidbody_type::Dynamic);
+			.addComponent<physics::px_sphere_collider_component>(1.0f)
+			.addComponent<physics::px_rigidbody_component>(physics::px_rigidbody_type::Dynamic);
 
 		auto px_sphere1 = &scene.createEntity("SpherePX1")
 			.addComponent<transform_component>(vec3(0, 5.f, 0), quat(vec3(0.f, 0.f, 0.f), deg2rad(1.f)), vec3(1.f))
 			.addComponent<mesh_component>(sphereMesh)
-			.addComponent<px_sphere_collider_component>(1.0f)
-			.addComponent<px_rigidbody_component>(px_rigidbody_type::Dynamic);
+			.addComponent<physics::px_sphere_collider_component>(1.0f)
+			.addComponent<physics::px_rigidbody_component>(physics::px_rigidbody_type::Dynamic);
 
 		px_sphere1->addChild(*px_sphere);
 
@@ -297,21 +299,21 @@ void application::initialize(main_renderer* renderer, editor_panels* editorPanel
 
 		auto px_plane = &scene.createEntity("PlanePX")
 			.addComponent<transform_component>(vec3(0.f, 0.0f, 0.0f), quat::identity, vec3(1.f))
-			.addComponent<px_plane_collider_component>();
+			.addComponent<physics::px_plane_collider_component>();
 
 		/*auto px_plane_wall1 = &scene.createEntity("PlanePX_Wall1")
 			.addComponent<transform_component>(vec3(0.f, 0.0f, 0.0f), quat::identity, vec3(1.f))
 			.addComponent<px_plane_collider_component>(vec3(0.f, 0.f, 0.f));*/
 
-		/*particles = scene.createEntity("ParticlesPX")
-			.addComponent<transform_component>(vec3(0.f, 10.0f, 0.0f), quat::identity, vec3(1.f))
-			.addComponent<px_particles_component>(10, 10, 10).handle;
+		//particles = scene.createEntity("ParticlesPX")
+		//	.addComponent<transform_component>(vec3(0.f, 10.0f, 0.0f), quat::identity, vec3(1.f))
+		//	.addComponent<physics::px_particles_component>(10, 10, 10).handle;
 
-		cloth = scene.createEntity("ClothPX")
-			.addComponent<transform_component>(vec3(0.f, 15.0f, 0.0f), eulerToQuat(vec3(0.0f, 0.0f, 0.0f)), vec3(1.f))
-			.addComponent<px_cloth_component>(10, 10, vec3(0.f, 15.0f, 0.0f)).handle;*/
+		//cloth = scene.createEntity("ClothPX")
+		//	.addComponent<transform_component>(vec3(0.f, 15.0f, 0.0f), eulerToQuat(vec3(0.0f, 0.0f, 0.0f)), vec3(1.f))
+		//	.addComponent<physics::px_cloth_component>(10, 10, vec3(0.f, 15.0f, 0.0f)).handle;
 
-		px_raycast_info rci = px_physics_engine::get()->raycast(&px_sphere1->getComponent<px_rigidbody_component>(), vec3(0, -1, 0));
+		physics::px_raycast_info rci = physics::physics_holder::physicsRef->raycast(&px_sphere1->getComponent<physics::px_rigidbody_component>(), vec3(0, -1, 0));
 		if (rci.actor)
 		{
 			std::cout << "Raycast. Dist: " << rci.distance << '\n';
@@ -321,7 +323,7 @@ void application::initialize(main_renderer* renderer, editor_panels* editorPanel
 			std::cout << "Raycast. Dist: " << rci.distance << "\n";
 		}
 
-		const auto& overlap_info = px_physics_engine::overlapCapsule(vec3(0, -5, 0), 1.5f, 3.0f, quat::identity, false);
+		const auto& overlap_info = physics::physics_holder::physicsRef->overlapCapsule(vec3(0, -5, 0), 1.5f, 3.0f, quat::identity, false);
 
 		std::cout << "Overlapping: " << overlap_info.isOverlapping << "\n";
 		std::cout << "Results: " << overlap_info.results.size() << "\n";
@@ -630,15 +632,15 @@ void application::update(const user_input& input, float dt)
 				renderWireCone(prc.position, prc.rotation * vec3(0.f, 0.f, -1.f),
 					sl->distance, sl->outerAngle * 2.f, vec4(sl->color, 1.f), &ldrRenderPass);
 			}
-			else if (px_capsule_cct_component* cct = selectedEntity.getComponentIfExists<px_capsule_cct_component>())
+			else if (physics::px_capsule_cct_component* cct = selectedEntity.getComponentIfExists<physics::px_capsule_cct_component>())
 			{
 				dynamic_transform_component& dtc = selectedEntity.getComponent<dynamic_transform_component>();
-				renderWireCapsule(dtc.position, dtc.position + vec3(0, cct->getHeight(), 0), cct->getRadius(), vec4(0.107f, 1.0f, 0.0f, 1.0f), &ldrRenderPass);
+				renderWireCapsule(dtc.position, dtc.position + vec3(0, cct->height, 0), cct->radius, vec4(0.107f, 1.0f, 0.0f, 1.0f), &ldrRenderPass);
 			}
-			else if (px_box_cct_component* cct = selectedEntity.getComponentIfExists<px_box_cct_component>())
+			else if (physics::px_box_cct_component* cct = selectedEntity.getComponentIfExists<physics::px_box_cct_component>())
 			{
 				dynamic_transform_component& dtc = selectedEntity.getComponent<dynamic_transform_component>();
-				renderWireBox(dtc.position, vec3(cct->getHalfSideExtent(), cct->getHalfHeight() * 2, cct->getHalfSideExtent()), dtc.rotation, vec4(0.107f, 1.0f, 0.0f, 1.0f), &ldrRenderPass);
+				renderWireBox(dtc.position, vec3(cct->halfSideExtent, cct->halfHeight * 2, cct->halfSideExtent), dtc.rotation, vec4(0.107f, 1.0f, 0.0f, 1.0f), &ldrRenderPass);
 			}
 		}
 
@@ -647,21 +649,16 @@ void application::update(const user_input& input, float dt)
 		//// Tests
 		//{
 		//	eentity entityCloth{ cloth, &scene.registry };
-		//	entityCloth.getComponent<px_cloth_component>().clothSystem->update(true, &ldrRenderPass);
+		//	entityCloth.getComponent<physics::px_cloth_component>().clothSystem->update(true, &ldrRenderPass);
 
 		//	eentity entityParticles{ particles, &scene.registry };
-		//	entityParticles.getComponent<px_particles_component>().particleSystem->update(true, &ldrRenderPass);
+		//	entityParticles.getComponent<physics::px_particles_component>().particleSystem->update(true, &ldrRenderPass);
 
 		//	if (input.keyboard['G'].down)
 		//	{
-		//		entityCloth.getComponent<px_cloth_component>().clothSystem->translate(PxVec4(0.f, 2.f, 0.f, 0.f));
+		//		entityCloth.getComponent<physics::px_cloth_component>().clothSystem->translate(vec3(0.f, 2.f, 0.f));
 		//		//entityParticles.getComponent<px_particles_component>().particleSystem->translate(PxVec4(0.f, 20.f, 0.f, 0.f));
 		//	}
-		//}
-
-		//if (input.keyboard['G'].down)
-		//{
-		//	//px_physics_engine::get()->getPhysicsAdapter()->pvd->disconnect();
 		//}
 
 		submitRendererParams(lighting.numSpotShadowRenderPasses, lighting.numPointShadowRenderPasses);

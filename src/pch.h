@@ -20,6 +20,7 @@
 namespace fs = std::filesystem;
 
 #include <mutex>
+#include <unordered_map>
 #include <wrl.h> 
 
 #define RELEASE_PTR(ptr) if(ptr) { delete ptr; ptr = nullptr; }
@@ -50,7 +51,7 @@ typedef uint64_t uint64;
 typedef wchar_t wchar;
 
 #define ASSERT(cond) \
-	(void)((!!(cond)) || (std::cout << "Assertion '" << #cond "' failed [" __FILE__ " : " << __LINE__ << "].\n", ::__debugbreak(), 0))
+	(void)((!!(cond)) || (::std::cout << "Assertion '" << #cond "' failed [" __FILE__ " : " << __LINE__ << "].\n", ::__debugbreak(), 0))
 
 template <typename T> using ref = std::shared_ptr<T>;
 template <typename T> using weakref = std::weak_ptr<T>;
@@ -86,6 +87,21 @@ NODISCARD constexpr inline auto max(T a, T b)
 {
 	return (a < b) ? b : a;
 }
+
+struct lock
+{
+	lock(std::mutex& mutex) : sync(&mutex)
+	{
+		sync->lock();
+	}
+
+	~lock()
+	{
+		sync->unlock();
+	}
+
+	std::mutex* sync = nullptr;
+};
 
 template <auto V> static constexpr auto force_consteval = V;
 

@@ -431,6 +431,7 @@ bool eeditor::drawMainMenuBar()
 
 			if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN "  Load scene", "Ctrl+O"))
 			{
+				forceStop();
 				deserializeFromFile();
 			}
 
@@ -966,49 +967,49 @@ bool eeditor::drawSceneHierarchy()
 						ImGui::Text("Ray-tracing component ON");
 					});
 
-					drawComponent<px_box_collider_component>(selectedEntity, "Box Collider (PhysX)", [](px_box_collider_component& trace)
+					drawComponent<physics::px_box_collider_component>(selectedEntity, "Box Collider (PhysX)", [](physics::px_box_collider_component& trace)
 					{
 						ImGui::Text("Box collider component");
 					});
 
-					drawComponent<px_sphere_collider_component>(selectedEntity, "Sphere Collider (PhysX)", [](px_sphere_collider_component& trace)
+					drawComponent<physics::px_sphere_collider_component>(selectedEntity, "Sphere Collider (PhysX)", [](physics::px_sphere_collider_component& trace)
 					{
 						ImGui::Text("Sphere collider component");
 					});
 
-					drawComponent<px_bounding_box_collider_component>(selectedEntity, "Bounding Box Collider (PhysX)", [](px_bounding_box_collider_component& trace)
+					drawComponent<physics::px_bounding_box_collider_component>(selectedEntity, "Bounding Box Collider (PhysX)", [](physics::px_bounding_box_collider_component& trace)
 					{
 						ImGui::Text("Bounding Box collider component");
 					});
 
-					drawComponent<px_capsule_collider_component>(selectedEntity, "Capsule Collider (PhysX)", [](px_capsule_collider_component& trace)
+					drawComponent<physics::px_capsule_collider_component>(selectedEntity, "Capsule Collider (PhysX)", [](physics::px_capsule_collider_component& trace)
 					{
 						ImGui::Text("Capsule collider component");
 					});
 
-					drawComponent<px_triangle_mesh_collider_component>(selectedEntity, "Triangle Mesh Collider (PhysX)", [](px_triangle_mesh_collider_component& trace)
+					drawComponent<physics::px_triangle_mesh_collider_component>(selectedEntity, "Triangle Mesh Collider (PhysX)", [](physics::px_triangle_mesh_collider_component& trace)
 					{
 						ImGui::Text("Triangle mesh collider component");
 					});
 
-					drawComponent<px_capsule_cct_component>(selectedEntity, "Character Controller (PhysX)", [](px_capsule_cct_component& cct)
+					drawComponent<physics::px_capsule_cct_component>(selectedEntity, "Character Controller (PhysX)", [](physics::px_capsule_cct_component& cct)
 					{
 						ImGui::Text("Kinematic character controller");
 						ImGui::Text("Controller type: Capsule");
 					});
 
-					drawComponent<px_box_cct_component>(selectedEntity, "Character Controller (PhysX)", [](px_box_cct_component& cct)
+					drawComponent<physics::px_box_cct_component>(selectedEntity, "Character Controller (PhysX)", [](physics::px_box_cct_component& cct)
 					{
 						ImGui::Text("Kinematic character controller");
 						ImGui::Text("Controller type: Box");
 					});
 
-					drawComponent<px_cloth_component>(selectedEntity, "Cloth (PhysX)", [](px_cloth_component& cloth)
+					drawComponent<physics::px_cloth_component>(selectedEntity, "Cloth (PhysX)", [](physics::px_cloth_component& cloth)
 					{
 						ImGui::Text("Cloth");
 					});
 
-					drawComponent<px_cloth_render_component>(selectedEntity, "Cloth Renderer (PhysX)", [](px_cloth_render_component& cloth)
+					drawComponent<physics::px_cloth_render_component>(selectedEntity, "Cloth Renderer (PhysX)", [](physics::px_cloth_render_component& cloth)
 					{
 						ImGui::Text("Cloth Renderer");
 					});
@@ -1276,14 +1277,15 @@ bool eeditor::drawSceneHierarchy()
 						}
 					});
 
-					drawComponent<px_rigidbody_component>(selectedEntity, "Rigidbody (PhysX)", [this, &scene](px_rigidbody_component& rb)
+					drawComponent<physics::px_rigidbody_component>(selectedEntity, "Rigidbody (PhysX)", [this, &scene](physics::px_rigidbody_component& rb)
 						{
-							using component_t = px_rigidbody_component;
+							using component_t = physics::px_rigidbody_component;
 
 							if (ImGui::BeginProperties())
 							{
 								ImGui::PropertyValue("Mass", 1.f / rb.getMass(), "%.3fkg");
-								bool dynamic = rb.getType() == px_rigidbody_type::Dynamic;
+								bool dynamic = rb.type == physics::px_rigidbody_type::Dynamic;
+
 								//if (dynamic)
 								//{
 								//	vec3 lv = rb.getLinearVelocity();
@@ -1933,14 +1935,12 @@ void eeditor::onObjectMoved()
 		{
 			cloth->setWorldPositionOfFixedVertices(selectedEntity.getComponent<transform_component>(), false);
 		}
-		else if (px_cloth_component* cloth = selectedEntity.getComponentIfExists<px_cloth_component>())
+		else if (physics::px_cloth_component* cloth = selectedEntity.getComponentIfExists<physics::px_cloth_component>())
 		{
 			cloth->clothSystem->translate(selectedEntity.getComponent<transform_component>().position);
 		}
 	}
 }
-
-volatile bool paused = false;
 
 bool eeditor::handleUserInput(const user_input& input, ldr_render_pass* ldrRenderPass, float dt)
 {
@@ -2134,10 +2134,10 @@ bool eeditor::handleUserInput(const user_input& input, ldr_render_pass* ldrRende
 		{
 			if (gizmo.manipulateTransformation(*transform, camera, input, !inputCaptured, ldrRenderPass))
 			{
-				if(auto rb = selectedEntity.getComponentIfExists<px_rigidbody_component>())
+				if(auto rb = selectedEntity.getComponentIfExists<physics::px_rigidbody_component>())
 					rb->setPhysicsPositionAndRotation(transform->position, transform->rotation);
 
-				if (px_cloth_component* cloth = selectedEntity.getComponentIfExists<px_cloth_component>())
+				if (physics::px_cloth_component* cloth = selectedEntity.getComponentIfExists<physics::px_cloth_component>())
 					cloth->clothSystem->translate(selectedEntity.getComponent<transform_component>().position);
 
 				updateSelectedEntityUIRotation();
@@ -2229,36 +2229,17 @@ bool eeditor::handleUserInput(const user_input& input, ldr_render_pass* ldrRende
 
 		if (ImGui::IconButton(imgui_icon_play, imgui_icon_play, IMGUI_ICON_DEFAULT_SIZE, this->scene->isPlayable()))
 		{
-			this->scene->play();
-			undoStacks[1].reset();
-			setSelectedEntity({});
-
-			for (auto [entityHandle, rigidbody, transform] : this->scene->getCurrentScene().group(component_group<px_rigidbody_component, transform_component>).each())
-			{
-				rigidbody.setPhysicsPositionAndRotation(transform.position, transform.rotation);
-			}
-
-			if (!paused)
-				app->linker.start();
-			else
-				paused = false;
+			forceStart();
 		}
 		ImGui::SameLine(0.f, IMGUI_ICON_DEFAULT_SPACING);
 		if (ImGui::IconButton(imgui_icon_pause, imgui_icon_pause, IMGUI_ICON_DEFAULT_SIZE, this->scene->isPausable()))
 		{
-			this->scene->pause();
-			paused = true;
+			forcePause();
 		}
 		ImGui::SameLine(0.f, IMGUI_ICON_DEFAULT_SPACING);
 		if (ImGui::IconButton(imgui_icon_stop, imgui_icon_stop, IMGUI_ICON_DEFAULT_SIZE, this->scene->isStoppable()))
 		{
-			this->scene->stop();
-			this->scene->environment.forceUpdate(this->scene->sun.direction);
-			setSelectedEntity({});
-			app->linker.reload_src();
-			px_physics_engine::get()->resetActorsVelocityAndInertia();
-			paused = false;
-			this->scene->editor_camera.setPositionAndRotation(vec3(0.0f), quat::identity);
+			forceStop();
 		}
 
 		scene = &this->scene->getCurrentScene();
@@ -2414,7 +2395,7 @@ bool eeditor::drawEntityCreationPopup()
 
 		if (ImGui::MenuItem("Empty", "E") || ImGui::IsKeyPressed('E'))
 		{
-			auto empty = scene->createEntity("Empty")
+			auto& empty = scene->createEntity("Empty")
 				.addComponent<transform_component>(camera.position + camera.rotation * vec3(0.f, 0.f, -3.f), quat::identity);
 
 			currentUndoStack->pushAction("entity creation", entity_existence_undo(*scene, empty));
@@ -2770,6 +2751,42 @@ bool eeditor::editSharpen(bool& enable, sharpen_settings& settings)
 	return result;
 }
 
+volatile bool paused = false;
+
+void eeditor::forceStart()
+{
+	this->scene->play();
+	undoStacks[1].reset();
+	setSelectedEntity({});
+
+	for (auto [entityHandle, rigidbody, transform] : this->scene->getCurrentScene().group(component_group<physics::px_rigidbody_component, transform_component>).each())
+	{
+		rigidbody.setPhysicsPositionAndRotation(transform.position, transform.rotation);
+	}
+
+	if (!paused)
+		app->linker.start();
+	else
+		paused = false;
+}
+
+void eeditor::forcePause()
+{
+	this->scene->pause();
+	paused = true;
+}
+
+void eeditor::forceStop()
+{
+	this->scene->stop();
+	this->scene->environment.forceUpdate(this->scene->sun.direction);
+	setSelectedEntity({});
+	app->linker.reload_src();
+	physics::physics_holder::physicsRef->resetActorsVelocityAndInertia();
+	paused = false;
+	this->scene->editor_camera.setPositionAndRotation(vec3(0.0f), quat::identity);
+}
+
 void eeditor::drawSettings(float dt)
 {
 	escene* scene = &this->scene->getCurrentScene();
@@ -2997,17 +3014,18 @@ void eeditor::drawSettings(float dt)
 		{
 			if (ImGui::BeginProperties())
 			{
-				UNDOABLE_SETTING("px frame rate", px_physics_engine::get()->frameRate,
-					ImGui::PropertyInput("Frame rate", px_physics_engine::get()->frameRate));
-				if (px_physics_engine::get()->frameRate < 30)
+				const auto& physicsRef = physics::physics_holder::physicsRef;
+				UNDOABLE_SETTING("px frame rate", physicsRef->frameRate,
+					ImGui::PropertyInput("Frame rate", physicsRef->frameRate));
+				if (physicsRef->frameRate < 30)
 				{
 					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 0.f, 0.f, 1.f));
 					ImGui::PropertyValue("", "Low frame rate");
 					ImGui::PopStyleColor();
 				}
 
-				uint32 nbaa = px_physics_engine::get()->nbActiveActors;;
-				uint32 nba = px_physics_engine::get()->actors_map.size();
+				uint32 nbaa = physicsRef->nbActiveActors;;
+				uint32 nba = physicsRef->actors_map.size();
 				ImGui::PropertyValue("Number of active actors", std::to_string(nbaa).c_str());
 				ImGui::PropertyValue("Number of actors", std::to_string(nba).c_str());
 #if PX_GPU_BROAD_PHASE
